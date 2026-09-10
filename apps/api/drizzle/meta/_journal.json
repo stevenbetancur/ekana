@@ -15,6 +15,13 @@
       "when": 1789066167407,
       "tag": "0001_roadmaps_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1789066384849,
+      "tag": "0002_communication_gamification_system",
+      "breakpoints": true
     }
   ]
 }
