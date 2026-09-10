@@ -1,11 +1,14 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, afterAll } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { healthResponseSchema, errorResponseSchema } from '@ekana/shared';
 import { buildApp } from '../src/app.js';
+import { createPool } from '../src/db/connection.js';
 import { AppError } from '../src/lib/errors.js';
 import { makeTestConfig } from './helpers/config.js';
 
+const config = makeTestConfig();
+const lazyPool = createPool(config.db);
 let app: FastifyInstance | undefined;
 
 afterEach(async () => {
@@ -13,8 +16,12 @@ afterEach(async () => {
   app = undefined;
 });
 
+afterAll(async () => {
+  await lazyPool.end();
+});
+
 function createApp(): FastifyInstance {
-  app = buildApp({ config: makeTestConfig() });
+  app = buildApp({ config, pool: lazyPool });
   return app;
 }
 
