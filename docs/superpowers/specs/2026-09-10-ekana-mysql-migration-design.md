@@ -1,7 +1,7 @@
 # Ekana — Migración a Front + API + MySQL (diseño)
 
 - **Fecha:** 2026-09-10
-- **Estado:** aprobado por secciones; pendiente revisión final del documento
+- **Estado:** aprobado (2026-09-10)
 - **Origen:** `C:\proyectos\ekana-team-up-now` (Vite + React + Supabase, MVP con mocks)
 - **Destino:** `C:\proyectos\ekana` — repo `https://github.com/stevenbetancur/ekana.git`
 
@@ -102,11 +102,13 @@ Se mantienen los enums existentes: `user_role (admin, member)`, `notification_ty
 
 | Entorno | BD | Usuario |
 |---|---|---|
-| Desarrollo | `ekana` | `ekana_app` |
-| Tests (local y CI) | `ekana_test` | `ekana_app` |
-| Producción | `ekana_prod` (se crea en la fase 7) | usuario propio de producción |
+| Desarrollo | `ekana` | `admin` |
+| Tests (local y CI) | `ekana_test` (la crea automáticamente el setup de tests si no existe) | `admin` |
+| Producción | `ekana_prod` (se crea en la fase 7) | `admin` (decisión del usuario: ambiente controlado) |
 
-El usuario de la app nunca es `admin` y solo tiene privilegios sobre las BDs de Ekana. Conexión con SSL obligatorio (`REQUIRE SSL`, certificado CA de RDS).
+Decisión del usuario: se usa el usuario `admin` del RDS en todos los entornos. Consecuencia aceptada: una fuga de credenciales de la app da acceso a todas las BDs del servidor. Mitigaciones: credenciales solo en variables de entorno, conexión con SSL, y el setup de tests se niega a correr contra una BD cuyo nombre no termine en `_test`.
+
+El charset/collation de `ekana` se fija con un script `db:setup` (`ALTER DATABASE ... utf8mb4_0900_ai_ci`) antes de la primera migración.
 
 ## 4. API
 
@@ -186,7 +188,9 @@ Un recurso no visible para el usuario responde 404 (no 403), para no revelar su 
 
 - **Local:** `apps/web` en `:8080` con proxy de Vite `/api` → `http://localhost:3000`; `apps/api` en `:3000` contra la BD `ekana` del RDS.
 - **Producción:** Vercel (raíz `apps/web`, `vercel.json` con rewrite de `/api/*` a Railway y fallback SPA) + Railway (servicio `apps/api`, pre-deploy `drizzle-kit migrate`, start `node dist/server.js`) + `ekana_prod`.
-- **Red:** Railway no tiene IP de salida fija (salvo plan Pro) y GitHub Actions tampoco; el security group del RDS deberá permitir esas conexiones (SSL obligatorio + credenciales fuertes, o IPs estáticas de Railway Pro). Se decide en la fase 1 al primer despliegue.
+- **Red:** el RDS es de acceso público (el usuario ya lo usa desde Railway en otros proyectos), así que Railway y GitHub Actions se conectan directamente a `inti.cmso5z249brn.us-east-1.rds.amazonaws.com:3306` con SSL. No se requieren IPs estáticas.
+- **Correo:** en desarrollo `EMAIL_FROM=Ekana <ekana@ekana.com.co>` vía la cuenta Gmail del SMTP (contraseña de aplicación). Se cambiará por un remitente del dominio definitivo; Gmail puede reescribir el remitente si no es un alias verificado de la cuenta.
+- **Cuentas:** Railway ya existe y está vinculado a GitHub; la cuenta de Vercel se crea al final de la fase 1.
 - **Tests:** Vitest en `apps/api` con `app.inject` contra `ekana_test`; cada archivo de test limpia sus tablas. Toda regla de §4.3 tiene al menos un test "permitido" y uno "denegado".
 - **CI (GitHub Actions):** en cada PR y push a `main`: lint, typecheck de los tres paquetes, tests del API y build del front.
 
