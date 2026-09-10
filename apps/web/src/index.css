@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. */
+
+@layer base {
+  :root {
+    /* Ekana Brand Colors */
+    --ekana-purple: 262 83% 58%;
+    --ekana-purple-dark: 262 83% 48%;
+    --ekana-purple-light: 262 83% 68%;
+    --ekana-green: 142 76% 36%;
+    --ekana-green-light: 142 76% 46%;
+    --ekana-orange: 25 95% 53%;
+    --ekana-blue: 217 91% 60%;
+    --ekana-cream: 39 100% 97%;
+    --ekana-peach: 14 100% 95%;
+    
+    /* Base System Colors */
+    --background: 39 100% 97%;
+    --foreground: 262 20% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 262 20% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 262 20% 15%;
+    
+    /* Primary (Purple) */
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    
+    /* Secondary (Green) */
+    --secondary: 142 76% 36%;
+    --secondary-foreground: 0 0% 100%;
+    
+    /* Accent (Orange) */
+    --accent: 25 95% 53%;
+    --accent-foreground: 0 0% 100%;
+    
+    /* Muted */
+    --muted: 39 100% 97%;
+    --muted-foreground: 262 15% 45%;
+    
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    /* Borders & Inputs */
+    --border: 262 20% 85%;
+    --input: 262 20% 90%;
+    --ring: 262 83% 58%;
+    
+    /* Charts */
+    --chart-1: 262 83% 58%;
+    --chart-2: 142 76% 36%;
+    --chart-3: 25 95% 53%;
+    --chart-4: 217 91% 60%;
+    --chart-5: 300 75% 65%;
+    
+    --radius: 0.75rem;
+    
+    /* Sidebar (Purple theme) */
+    --sidebar-background: 262 83% 58%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 262 83% 68%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 262 83% 48%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 262 83% 48%;
+    --sidebar-ring: 262 83% 68%;
+  }
+
+  .dark {
+    --background: 262 20% 8%;
+    --foreground: 39 100% 97%;
+    --card: 262 20% 12%;
+    --card-foreground: 39 100% 97%;
+    --popover: 262 20% 12%;
+    --popover-foreground: 39 100% 97%;
+    --primary: 262 83% 68%;
+    --primary-foreground: 262 20% 8%;
+    --secondary: 142 76% 46%;
+    --secondary-foreground: 262 20% 8%;
+    --accent: 25 95% 63%;
+    --accent-foreground: 262 20% 8%;
+    --muted: 262 20% 15%;
+    --muted-foreground: 262 15% 65%;
+    --destructive: 0 84% 70%;
+    --destructive-foreground: 262 20% 8%;
+    --border: 262 20% 20%;
+    --input: 262 20% 25%;
+    --ring: 262 83% 68%;
+    --sidebar-background: 262 83% 58%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 262 83% 68%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 262 83% 48%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 262 83% 48%;
+    --sidebar-ring: 262 83% 68%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html, body {
+    @apply overflow-hidden h-full;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1789065597354,
+      "tag": "0000_auth_profiles_teams",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1789066167407,
+      "tag": "0001_roadmaps_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1789066384849,
+      "tag": "0002_communication_gamification_system",
+      "breakpoints": true
+    }
+  ]
+}

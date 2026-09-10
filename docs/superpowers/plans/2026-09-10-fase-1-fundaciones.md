@@ -1696,8 +1696,8 @@ import { roadmaps, subunits } from './roadmaps.js';
 import { teams } from './teams.js';
 
 // team_key = COALESCE(team_id, '') hace que el UNIQUE también proteja las activaciones personales
-// (team_id NULL). MySQL prohíbe ON DELETE SET NULL en la columna base de una columna generada
-// almacenada, por eso team_id usa CASCADE.
+// (team_id NULL). Es VIRTUAL porque MySQL rechaza FKs con acciones referenciales sobre la columna
+// base de una columna generada STORED; con VIRTUAL la FK con CASCADE y el UNIQUE funcionan.
 export const activations = mysqlTable(
   'activations',
   {
@@ -1711,7 +1711,7 @@ export const activations = mysqlTable(
     teamId: uuidRef().references(() => teams.id, { onDelete: 'cascade' }),
     teamKey: char({ length: 36 })
       .notNull()
-      .generatedAlwaysAs(sql`coalesce(\`team_id\`, '')`, { mode: 'stored' }),
+      .generatedAlwaysAs(sql`coalesce(\`team_id\`, '')`, { mode: 'virtual' }),
     isActive: boolean().notNull().default(true),
     startedAt: createdAt(),
   },
@@ -1878,7 +1878,7 @@ Expected: FAIL (`Table 'ekana_test.roadmaps' doesn't exist`).
 - [ ] **Step 3: Generar la migración y correr los tests**
 
 Run: `npm run build:shared && npm run db:generate -w @ekana/api -- --name=roadmaps_progress && npm test`
-Expected: se genera `drizzle/0001_roadmaps_progress.sql` y todos los tests pasan. En el SQL, la columna `team_key` debe aparecer como `GENERATED ALWAYS AS (coalesce(\`team_id\`, '')) STORED NOT NULL` y la FK `activations.team_id` como `ON DELETE cascade ON UPDATE no action`.
+Expected: se genera `drizzle/0001_roadmaps_progress.sql` y todos los tests pasan. En el SQL, la columna `team_key` debe aparecer como `GENERATED ALWAYS AS (coalesce(\`team_id\`, '')) VIRTUAL NOT NULL` y la FK `activations.team_id` como `ON DELETE cascade ON UPDATE no action`.
 
 - [ ] **Step 4: Aplicar en desarrollo, typecheck y commit**
 
