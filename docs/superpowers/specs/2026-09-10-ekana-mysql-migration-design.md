@@ -72,7 +72,7 @@ Dominios: `auth`, `profiles`, `teams`, `roadmaps`, `progress`, `gamification`, `
 
 **Tablas de dominio:** `profiles`, `teams`, `team_members`, `team_goals`, `roadmaps`, `units`, `subunits`, `activations`, `progress_tracking`, `requests`, `messages`, `notifications`, `point_events`, `badge_events`, `partners`, `system_events`, `user_entitlements`, `analytics_events`.
 
-`profiles` es 1:1 con `users` (`profiles.id` = `users.id`, FK con `ON DELETE CASCADE`).
+`profiles` es 1:1 con `users` (`profiles.id` = `users.id`, FK con `ON DELETE CASCADE`). `name`, `email` y el avatar (`image`) viven solo en `users` (los gestiona Better Auth); `profiles` guarda el resto de campos del perfil sin duplicarlos.
 
 ### 3.1 Reglas de traducción desde Postgres
 
@@ -82,11 +82,11 @@ Dominios: `auth`, `profiles`, `teams`, `roadmaps`, `progress`, `gamification`, `
 | `JSONB` + índices GIN | `JSON` sin índices (no se consultan por contenido hoy) |
 | `TIMESTAMPTZ` | `DATETIME(3)`, siempre UTC (conexión con `timezone: 'Z'`) |
 | `CREATE TYPE ... ENUM` | `ENUM(...)` en la columna |
-| Trigger `handle_updated_at` | `DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)` |
+| Trigger `handle_updated_at` / `DEFAULT now()` | `$defaultFn` / `$onUpdate` de Drizzle (todas las escrituras pasan por el ORM) |
 | Trigger `handle_new_user` | Hook de Better Auth: crea `profiles` en la misma transacción del registro |
 | `UNIQUE INDEX ON lower(email)` | `UNIQUE(email)`; la collation ya es case-insensitive |
 | Índice parcial `notifications WHERE read = false` | Índice `(user_id, read, created_at)` |
-| `messages(team_id, created_at DESC)` | Igual (MySQL 8 soporta índices descendentes) |
+| `messages(team_id, created_at DESC)` | Índice `(team_id, created_at)`; MySQL lo recorre en orden inverso |
 
 Se mantienen los enums existentes: `user_role (admin, member)`, `notification_type`, `notification_level`, `roadmap_owner_type (USER, TEAM, THIRD_PARTY)`, `request_type (CREATE_TEAM, INVITE_TO_TEAM, REQUEST_TO_JOIN)`, `request_status (pending, accepted, rejected, expired)`.
 
@@ -94,9 +94,9 @@ Se mantienen los enums existentes: `user_role (admin, member)`, `notification_ty
 
 ### 3.2 Correcciones de esquema
 
-1. **Activaciones duplicadas:** `UNIQUE(user_id, roadmap_id, team_id)` no protege cuando `team_id` es NULL (roadmap personal). Se añade la columna generada `team_key = COALESCE(team_id, '')` y el único pasa a ser `(user_id, roadmap_id, team_key)`.
+1. **Activaciones duplicadas:** `UNIQUE(user_id, roadmap_id, team_id)` no protege cuando `team_id` es NULL (roadmap personal). Se añade la columna generada almacenada `team_key = COALESCE(team_id, '')` y el único pasa a ser `(user_id, roadmap_id, team_key)`. Como MySQL prohíbe `ON DELETE SET NULL` en la columna base de una columna generada almacenada, `activations.team_id` pasa de `SET NULL` a `ON DELETE CASCADE` (al borrar un equipo se borran sus activaciones y su progreso).
 2. **Deduplicación de premios inexistente:** se añade `UNIQUE(user_id, unique_trigger_id)` en `point_events` y en `badge_events`. Otorgar un premio ya otorgado es una operación idempotente (no falla, no duplica).
-3. **Mensajes directos sin destinatario:** el front maneja DMs (`receiverId`), pero la tabla `messages` de Supabase no tiene esa columna (`chat.supabase.ts` no la persiste). Se añade `receiver_id CHAR(36) NULL` (FK a `profiles`) con `CHECK` de que exactamente uno de `team_id` / `receiver_id` tiene valor, e índice `(user_id, receiver_id, created_at)`.
+3. **Mensajes directos sin destinatario:** el front maneja DMs (`receiverId`), pero la tabla `messages` de Supabase no tiene esa columna (`chat.supabase.ts` no la persiste). Se añade `receiver_id CHAR(36) NULL` (FK a `profiles`, `ON DELETE CASCADE`) e índice `(user_id, receiver_id, created_at)`. La regla "exactamente uno de `team_id` / `receiver_id`" se valida en el API (esquema zod compartido), porque MySQL prohíbe `CHECK` sobre columnas con acciones referenciales de FK.
 
 ### 3.3 Bases de datos por entorno
 
