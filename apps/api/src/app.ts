@@ -15,14 +15,17 @@ import { AppError } from './lib/errors.js';
 import { redactUrl } from './lib/redact.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { profileRoutes } from './modules/profiles/routes.js';
+import { loadSpaIndex, registerWebApp } from './web/static.js';
 
 export interface AppDeps {
   config: Config;
   pool: Pool;
   mailer?: Mailer;
+  /** Carpeta con el build del front; si contiene index.html, el API también sirve la SPA. */
+  webDistDir?: string | null;
 }
 
-export function buildApp({ config, pool, mailer }: AppDeps): FastifyInstance {
+export function buildApp({ config, pool, mailer, webDistDir }: AppDeps): FastifyInstance {
   const app = Fastify({
     logger:
       config.nodeEnv === 'test'
@@ -44,8 +47,25 @@ export function buildApp({ config, pool, mailer }: AppDeps): FastifyInstance {
     trustProxy: true,
   });
 
-  registerErrorHandling(app);
-  app.register(helmet);
+  const spaIndexHtml = loadSpaIndex(webDistDir);
+  registerErrorHandling(app, { spaIndexHtml });
+  app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        // shadcn/Radix y sonner aplican estilos inline.
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        fontSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+  });
   app.register(cors, { origin: config.corsOrigins, credentials: true });
   app.register(rateLimit, {
     max: config.rateLimitMax,
@@ -59,6 +79,8 @@ export function buildApp({ config, pool, mailer }: AppDeps): FastifyInstance {
   app.register(authRoutes({ auth, config }), { prefix: '/api' });
   app.register(profileRoutes({ db, auth }), { prefix: '/api/v1' });
   app.register(healthRoutes({ pool }), { prefix: '/api' });
+
+  if (spaIndexHtml && webDistDir) registerWebApp(app, webDistDir);
 
   return app;
 }

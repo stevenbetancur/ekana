@@ -24,7 +24,7 @@ Convertir Ekana de un demo (Supabase + datos mock + localStorage) en una aplicac
 
 | Pieza | Tecnología | Despliegue |
 |---|---|---|
-| Frontend | React 18 + Vite + TypeScript + shadcn/ui + TanStack Query | Vercel |
+| Frontend | React 18 + Vite + TypeScript + shadcn/ui + TanStack Query | Railway: el API sirve el build (mismo dominio) |
 | API | Node 20 + Fastify + TypeScript (estricto) | Railway (proceso long-running) |
 | Base de datos | MySQL 8.0.45 en AWS RDS (us-east-1) | Servidor del usuario |
 | ORM / migraciones | Drizzle ORM + drizzle-kit | Migraciones se ejecutan en el pre-deploy de Railway |
@@ -62,9 +62,11 @@ Dominios: `auth`, `profiles`, `teams`, `roadmaps`, `progress`, `gamification`, `
 
 ### 2.2 Comunicación front ↔ API y sesiones
 
-- **Sin dominio propio (fase actual):** el front llama a `/api/*` en su propio origen (Vercel). `vercel.json` reescribe `/api/:path*` hacia la URL de Railway. Para el navegador es el mismo sitio, así que la cookie de sesión es de primera parte.
-- **Socket.IO** no atraviesa los rewrites de Vercel: el cliente pide un ticket firmado de corta duración (60 s) a `GET /api/realtime/ticket` y conecta directo a Railway presentándolo.
-- **Con dominio propio (futuro):** `app.<dominio>` (Vercel) y `api.<dominio>` (Railway). Solo cambian variables de entorno (URLs, dominio de cookie, orígenes CORS); no hay cambios de código.
+- **Un solo servicio en Railway (desde 2026-09-11):** el API sirve también el build del front (`apps/web/dist`) con `@fastify/static`: `assets/` con caché inmutable, `index.html` sin caché y fallback de la SPA para las navegaciones `GET` fuera de `/api`. Front y API comparten dominio (`https://ekana-production.up.railway.app`), así que la cookie de sesión es de primera parte y no hay proxy ni CORS.
+- **Motivo:** Vercel suspendió las cuentas (equipo `ekana` y personal) el 2026-09-11 por "violación de términos" sin detallar la causa (probablemente plan Hobby usado para un SaaS/equipo). Se descartó apelar.
+- **Socket.IO** (fase 6) conectará directo al mismo origen, sin el ticket que requería el diseño con Vercel.
+- **Seguridad:** helmet con CSP estricta (`script-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`).
+- **Con dominio propio (futuro):** se asigna el dominio al mismo servicio de Railway y se actualizan `APP_URL` y `CORS_ORIGINS`; no hay cambios de código.
 
 ## 3. Modelo de datos (MySQL)
 
@@ -187,10 +189,10 @@ Un recurso no visible para el usuario responde 404 (no 403), para no revelar su 
 ## 6. Entornos, despliegue y calidad
 
 - **Local:** `apps/web` en `:8080` con proxy de Vite `/api` → `http://localhost:3000`; `apps/api` en `:3000` contra la BD `ekana` del RDS.
-- **Producción:** Vercel (raíz `apps/web`, `vercel.json` con rewrite de `/api/*` a Railway y fallback SPA) + Railway (servicio `apps/api`, pre-deploy `drizzle-kit migrate`, start `node dist/server.js`) + `ekana_prod`.
+- **Producción:** un servicio de Railway (build `npm run build` de shared + API + front, pre-deploy de migraciones, start `node dist/server.js`, que sirve API y SPA) + `ekana_prod`.
 - **Red:** el RDS es de acceso público (el usuario ya lo usa desde Railway en otros proyectos), así que Railway y GitHub Actions se conectan directamente a `inti.cmso5z249brn.us-east-1.rds.amazonaws.com:3306` con SSL. No se requieren IPs estáticas.
 - **Correo:** en desarrollo `EMAIL_FROM=Ekana <ekana@ekana.com.co>` vía la cuenta Gmail del SMTP (contraseña de aplicación). Se cambiará por un remitente del dominio definitivo; Gmail puede reescribir el remitente si no es un alias verificado de la cuenta.
-- **Cuentas:** Railway ya existe y está vinculado a GitHub; la cuenta de Vercel se crea al final de la fase 1.
+- **Cuentas:** Railway (plan de pago, vinculado a GitHub) aloja todo. Vercel quedó descartado tras la suspensión de las cuentas.
 - **Tests:** Vitest en `apps/api` con `app.inject` contra `ekana_test`; cada archivo de test limpia sus tablas. Toda regla de §4.3 tiene al menos un test "permitido" y uno "denegado".
 - **CI (GitHub Actions):** en cada PR y push a `main`: lint, typecheck de los tres paquetes, tests del API y build del front.
 
