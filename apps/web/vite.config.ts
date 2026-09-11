@@ -17,6 +17,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Contrato compartido con el API, compilado desde el código fuente.
+      "@ekana/shared": path.resolve(__dirname, "../../packages/shared/src/index.ts"),
     },
   },
 });

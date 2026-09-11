@@ -57,6 +57,7 @@ export interface User {
     year: string;
   };
   location?: string;
+  age?: number | null;
 }
 
 // Event-based tracking interfaces

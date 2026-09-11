@@ -7,7 +7,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@ekana/shared": ["../../packages/shared/src/index.ts"]
     },
     "noImplicitAny": false,
     "noUnusedParameters": false,

@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Session, User as SupabaseUser } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import type { MeResponse } from '@ekana/shared';
+import { authClient } from '@/lib/auth-client';
+import { api, ApiError } from '@/lib/api';
 import { analyticsService } from '@/services/analytics';
-import { userProfileService } from '@/services/userProfile';
 
 // User type that components consume
 export interface User {
@@ -14,7 +14,6 @@ export interface User {
   profileComplete: boolean;
   hasActiveTeam: boolean;
   activeCourse?: string;
-  // Profile fields (maintained for backward compatibility with mockData.User)
   bio?: string;
   interests?: string[];
   languages?: Array<{ language: string; proficiency: string }>;
@@ -27,19 +26,27 @@ export interface User {
   customSubject?: string;
   schedule?: { weekdays: string[]; weekend: string[] };
   birthDate?: { month: string; day: string; year: string };
+  age?: number | null;
   location?: string;
+}
+
+export interface AuthResult {
+  error: Error | null;
+  code?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   loading: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signup: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
+  login: (email: string, password: string) => Promise<AuthResult>;
+  signup: (email: string, password: string, name: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => void;
-  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  refreshUser: () => Promise<void>;
+  resetPassword: (email: string) => Promise<AuthResult>;
+  confirmPasswordReset: (token: string, newPassword: string) => Promise<AuthResult>;
+  resendVerification: (email: string) => Promise<AuthResult>;
   clearError: () => void;
   hasActiveEntitlement: (userId: string, roadmapId: string) => boolean;
 }
@@ -54,266 +61,164 @@ export const useAuth = () => {
   return context;
 };
 
-// Transform Supabase user + profile data into our User type
-async function buildUserFromSupabase(supabaseUser: SupabaseUser): Promise<User> {
-  console.log('🔍 [Auth] Building user from Supabase:', {
-    id: supabaseUser.id,
-    email: supabaseUser.email,
-    metadata_full_name: supabaseUser.user_metadata?.full_name,
-  });
+const VERIFY_CALLBACK = '/onboarding';
+const RESET_CALLBACK = '/auth/reset-password';
 
-  // Fetch profile data via service layer (efficient single-record query)
-  const profile = await userProfileService.getProfileById(supabaseUser.id);
+const FRIENDLY_MESSAGES: Record<string, string> = {
+  INVALID_EMAIL_OR_PASSWORD: 'Invalid email or password. Please try again.',
+  EMAIL_NOT_VERIFIED: 'Please verify your email first. We just sent you a new verification link.',
+  USER_ALREADY_EXISTS: 'An account with this email already exists. Try signing in.',
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'An account with this email already exists. Try signing in.',
+  PASSWORD_TOO_SHORT: 'Password must be at least 8 characters long.',
+  PASSWORD_TOO_LONG: 'Password must be at most 128 characters long.',
+  INVALID_EMAIL: 'Please enter a valid email address.',
+  INVALID_TOKEN: 'This link is invalid or has expired. Please request a new one.',
+  TOKEN_EXPIRED: 'This link is invalid or has expired. Please request a new one.',
+  RATE_LIMITED: 'Too many attempts. Please wait a minute and try again.',
+};
 
-  console.log('🔍 [Auth] Profile from DB:', profile ? {
-    id: profile.id,
-    name: profile.name,
-    profileComplete: profile.profileComplete,
-    // JSONB-derived fields (these should be populated after onboarding)
-    bio: profile.bio,
-    subject: profile.subject,
-    goal: profile.goal,
-    level: profile.level,
-    weeklyHours: profile.weeklyHours,
-    interests: profile.interests,
-    languages: profile.languages,
-  } : 'NULL (profile not found)');
+function toFriendly(error: { code?: string; message?: string; status?: number }): { code?: string; message: string } {
+  const code = error.code ?? (error.status === 429 ? 'RATE_LIMITED' : undefined);
+  return { code, message: (code && FRIENDLY_MESSAGES[code]) || error.message || 'Something went wrong. Please try again.' };
+}
 
-  // Check team membership (will be refactored to TeamService later)
-  const { data: teamMembership } = await supabase
-    .from('team_members')
-    .select('team_id')
-    .eq('user_id', supabaseUser.id)
-    .limit(1);
-
-  // CRITICAL: Always prefer auth metadata name as fallback
-  // The DB trigger may fail to capture it, so we use metadata as source of truth
-  const nameFromMetadata = supabaseUser.user_metadata?.full_name;
-
-  // Handle null profile gracefully (e.g., race condition during signup)
-  // Fall back to basic user data from Auth metadata
-  if (!profile) {
-    console.log('⚠️ [Auth] No profile found, using auth metadata. Name:', nameFromMetadata);
-    return {
-      id: supabaseUser.id,
-      email: supabaseUser.email || '',
-      name: nameFromMetadata || 'User',
-      avatar: undefined,
-      isPremium: false,
-      profileComplete: false,
-      hasActiveTeam: (teamMembership?.length || 0) > 0,
-      activeCourse: undefined,
-    };
-  }
-
-  // Use profile name if set, otherwise fall back to auth metadata
-  const resolvedName = profile.name || nameFromMetadata || 'User';
-  console.log('✅ [Auth] Resolved name:', resolvedName, '(from profile:', profile.name, ', from metadata:', nameFromMetadata, ')');
-
+function toUser({ user, profile }: MeResponse): User {
   return {
-    id: supabaseUser.id,
-    email: supabaseUser.email || '',
-    name: resolvedName,
+    id: user.id,
+    email: user.email,
+    name: user.name || 'User',
     avatar: profile.avatar || undefined,
-    isPremium: profile.isPremium || false,
-    profileComplete: profile.profileComplete, // Use DB flag directly instead of deriving
-    hasActiveTeam: (teamMembership?.length || 0) > 0,
-    activeCourse: profile.activeCourse,
-    // Merge profile fields for backward compatibility
+    isPremium: profile.isPremium,
+    profileComplete: profile.profileComplete,
+    hasActiveTeam: profile.hasActiveTeam,
+    activeCourse: profile.activeCourse ?? undefined,
     bio: profile.bio,
     interests: profile.interests,
     languages: profile.languages,
     weeklyHours: profile.weeklyHours,
+    availability: profile.availability,
     communicationMethods: profile.communicationMethods,
     level: profile.level,
     goal: profile.goal as User['goal'],
     subject: profile.subject,
     schedule: profile.schedule,
-    birthDate: profile.birthDate || undefined,
+    birthDate: profile.birthDate ?? undefined,
+    age: profile.age,
     location: profile.location,
   };
 }
 
+async function fetchCurrentUser(): Promise<User | null> {
+  try {
+    return toUser(await api.get<MeResponse>('/v1/me'));
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return null;
+    throw error;
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Set up auth state listener FIRST (per Supabase best practices)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        setSession(newSession);
-        
-        if (newSession?.user) {
-          // Defer Supabase calls with setTimeout to prevent deadlock
-          setTimeout(async () => {
-            try {
-              const appUser = await buildUserFromSupabase(newSession.user);
-              setUser(appUser);
-              
-              // Track login event
-              if (event === 'SIGNED_IN') {
-                analyticsService.trackEvent(appUser.id, { eventType: 'login' });
-              }
-            } catch (err) {
-              console.error('Failed to build user from session:', err);
-              setUser(null);
-            }
-          }, 0);
-        } else {
-          setUser(null);
-        }
-      }
-    );
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
-      setSession(existingSession);
-      
-      if (existingSession?.user) {
-        try {
-          const appUser = await buildUserFromSupabase(existingSession.user);
-          setUser(appUser);
-        } catch (err) {
-          console.error('Failed to build user from existing session:', err);
-        }
-      }
-      
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    let active = true;
+    fetchCurrentUser()
+      .then((current) => {
+        if (active) setUser(current);
+      })
+      .catch((err) => console.error('Failed to load the current session:', err))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const login = async (email: string, password: string): Promise<{ error: Error | null }> => {
+  const fail = (err: { code?: string; message?: string; status?: number }): AuthResult => {
+    const friendly = toFriendly(err);
+    setError(friendly.message);
+    return { error: new Error(friendly.message), code: friendly.code };
+  };
+
+  const refreshUser = useCallback(async () => {
+    setUser(await fetchCurrentUser());
+  }, []);
+
+  const login = async (email: string, password: string): Promise<AuthResult> => {
     setError(null);
-    
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      const friendlyMessage = getFriendlyAuthError(signInError.message);
-      setError(friendlyMessage);
-      return { error: new Error(friendlyMessage) };
-    }
-
+    const { error: signInError } = await authClient.signIn.email({ email, password });
+    if (signInError) return fail(signInError);
+    const current = await fetchCurrentUser();
+    setUser(current);
+    if (current) analyticsService.trackEvent(current.id, { eventType: 'login' });
     return { error: null };
   };
 
-  const signup = async (email: string, password: string, name: string): Promise<{ error: Error | null }> => {
+  const signup = async (email: string, password: string, name: string): Promise<AuthResult> => {
     setError(null);
-    console.log('🔐 [Auth] Signup initiated:', { email, name: name ? '✓ provided' : '❌ missing' });
-    
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: name,
-        },
-      },
-    });
-
-    if (signUpError) {
-      console.error('❌ [Auth] Signup error:', signUpError.message);
-      const friendlyMessage = getFriendlyAuthError(signUpError.message);
-      setError(friendlyMessage);
-      return { error: new Error(friendlyMessage) };
-    }
-
-    // Log what was returned to verify metadata was set
-    console.log('✅ [Auth] Signup success:', {
-      userId: data.user?.id,
-      email: data.user?.email,
-      metadata_full_name: data.user?.user_metadata?.full_name,
-    });
-
-    // Track signup
-    if (data.user) {
-      analyticsService.trackEvent(data.user.id, { eventType: 'signup' });
-    }
-
+    const { error: signUpError } = await authClient.signUp.email({ email, password, name, callbackURL: VERIFY_CALLBACK });
+    if (signUpError) return fail(signUpError);
     return { error: null };
   };
 
   const logout = async (): Promise<void> => {
-    // Track logout before signing out
-    if (user) {
-      analyticsService.trackEvent(user.id, { eventType: 'logout' });
-    }
-    
-    await supabase.auth.signOut();
+    if (user) analyticsService.trackEvent(user.id, { eventType: 'logout' });
+    await authClient.signOut();
     setUser(null);
-    setSession(null);
   };
 
   const updateUser = (updates: Partial<User>) => {
-    if (user) {
-      setUser({ ...user, ...updates });
-    }
+    setUser((current) => (current ? { ...current, ...updates } : current));
   };
 
-  const resetPassword = async (email: string): Promise<{ error: Error | null }> => {
+  const resetPassword = async (email: string): Promise<AuthResult> => {
     setError(null);
-    
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth?mode=reset`,
-    });
+    const { error: resetError } = await authClient.requestPasswordReset({ email, redirectTo: RESET_CALLBACK });
+    if (resetError) return fail(resetError);
+    return { error: null };
+  };
 
-    if (resetError) {
-      const friendlyMessage = getFriendlyAuthError(resetError.message);
-      setError(friendlyMessage);
-      return { error: new Error(friendlyMessage) };
-    }
+  const confirmPasswordReset = async (token: string, newPassword: string): Promise<AuthResult> => {
+    setError(null);
+    const { error: resetError } = await authClient.resetPassword({ token, newPassword });
+    if (resetError) return fail(resetError);
+    return { error: null };
+  };
 
+  const resendVerification = async (email: string): Promise<AuthResult> => {
+    setError(null);
+    const { error: sendError } = await authClient.sendVerificationEmail({ email, callbackURL: VERIFY_CALLBACK });
+    if (sendError) return fail(sendError);
     return { error: null };
   };
 
   const clearError = () => setError(null);
 
-  // Check if user has entitlement to a roadmap (for paid content)
-  const hasActiveEntitlement = (userId: string, roadmapId: string): boolean => {
-    // TODO: Implement with Supabase query to user_entitlements table
-    // For now, return true (allow access) - implement proper check in Phase 2
-    return true;
-  };
+  // Check if user has entitlement to a roadmap (for paid content). Se implementa en la fase de roadmaps.
+  const hasActiveEntitlement = (_userId: string, _roadmapId: string): boolean => true;
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      session,
-      loading,
-      error,
-      login,
-      signup,
-      logout,
-      updateUser,
-      resetPassword,
-      clearError,
-      hasActiveEntitlement,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        error,
+        login,
+        signup,
+        logout,
+        updateUser,
+        refreshUser,
+        resetPassword,
+        confirmPasswordReset,
+        resendVerification,
+        clearError,
+        hasActiveEntitlement,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
-
-// Helper: Convert Supabase error messages to user-friendly messages
-function getFriendlyAuthError(message: string): string {
-  const errorMap: Record<string, string> = {
-    'Invalid login credentials': 'Invalid email or password. Please try again.',
-    'Email not confirmed': 'Please check your email and click the confirmation link.',
-    'User already registered': 'An account with this email already exists. Try signing in.',
-    'Password should be at least 6 characters': 'Password must be at least 6 characters long.',
-    'Unable to validate email address: invalid format': 'Please enter a valid email address.',
-    'Email rate limit exceeded': 'Too many attempts. Please try again in a few minutes.',
-  };
-
-  return errorMap[message] || message;
-}
