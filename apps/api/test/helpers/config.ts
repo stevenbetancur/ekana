@@ -10,6 +10,7 @@ export function makeTestConfig(overrides: Record<string, string> = {}): Config {
     DB_PASSWORD: 'test',
     DB_NAME: 'unit_test',
     DB_SSL: 'false',
+    BETTER_AUTH_SECRET: 'test-secret-que-solo-se-usa-en-tests-0123456789',
     ...overrides,
   });
 }
