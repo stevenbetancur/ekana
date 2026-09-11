@@ -1,10 +1,6 @@
-import * as local from './userProfile.local';
-import * as supabase from './userProfile.supabase';
+import * as apiService from './userProfile.api';
 
-const DATA_MODE = import.meta.env.VITE_DATA_MODE || 'supabase';
-
-console.log('🔧 [Service] DATA_MODE:', DATA_MODE);
-export const userProfileService = DATA_MODE === 'supabase' ? supabase : local;
+export const userProfileService = apiService;
 
 // Re-export types
 export type { UserProfile } from './types';

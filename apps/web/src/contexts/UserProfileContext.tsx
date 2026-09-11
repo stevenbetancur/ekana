@@ -3,28 +3,24 @@ import { useAuth } from './AuthContext';
 import { toast } from 'sonner';
 import { userProfileService, UserProfile, defaultProfile } from '@/services/userProfile';
 
-// Debug: Log service mode on module load
-console.log('🔍 [Init] Service Mode:', import.meta.env.VITE_DATA_MODE || 'local (default)');
-console.log('🔍 [Init] Service Impl:', userProfileService);
-
 // Re-export UserProfile type for consumers
 export type { UserProfile } from '@/services/userProfile';
 
 interface UserProfileContextType {
   // Loading state
   isLoading: boolean;
-  
+
   // Backward compatibility - current user's profile
   profile: UserProfile;
-  
+
   // Query functions (The API)
   getUserProfile: (userId: string) => UserProfile | undefined;
   getAllVisibleProfiles: () => UserProfile[];
   searchUsers: (query: string) => UserProfile[];
-  
+
   // Mutation function
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-  
+
   // Utility
   calculateAge: (birthDate: { month: string; day: string; year: string } | null) => number | null;
 }
@@ -41,38 +37,38 @@ export const useUserProfile = () => {
 
 export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  
+
   // Internal state - NOT exposed directly
   const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Initialize from service on mount
+  // Los perfiles requieren sesión: se cargan al iniciar sesión y se vacían al cerrarla.
   useEffect(() => {
+    if (!user?.id) {
+      setAllProfiles([]);
+      setIsLoading(false);
+      return;
+    }
+
     let mounted = true;
-    
-    const loadProfiles = async () => {
-      try {
-        setIsLoading(true);
-        const profiles = await userProfileService.fetchAllProfiles();
-        if (mounted) {
-          setAllProfiles(profiles);
-        }
-      } catch (error) {
+    setIsLoading(true);
+    userProfileService
+      .fetchAllProfiles()
+      .then((profiles) => {
+        if (mounted) setAllProfiles(profiles);
+      })
+      .catch((error) => {
         console.error('Failed to load user profiles:', error);
         toast.error('Failed to load user profiles');
-      } finally {
-        if (mounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-    
-    loadProfiles();
-    
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false);
+      });
+
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [user?.id]);
 
   // Backward compatibility: current user's profile
   const profile: UserProfile = allProfiles.find(p => p.id === user?.id) || { ...defaultProfile, id: user?.id || '' };
@@ -80,21 +76,21 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Helper function to calculate age from birthDate
   const calculateAge = useCallback((birthDate: { month: string; day: string; year: string } | null): number | null => {
     if (!birthDate || !birthDate.year || !birthDate.month || !birthDate.day) return null;
-    
+
     const today = new Date();
     const birth = new Date(
       parseInt(birthDate.year),
       parseInt(birthDate.month) - 1,
       parseInt(birthDate.day)
     );
-    
+
     let age = today.getFullYear() - birth.getFullYear();
     const monthDiff = today.getMonth() - birth.getMonth();
-    
+
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
       age--;
     }
-    
+
     return age;
   }, []);
 
@@ -110,9 +106,9 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const searchUsers = useCallback((query: string): UserProfile[] => {
     if (!query.trim()) return allProfiles;
-    
+
     const lowerQuery = query.toLowerCase();
-    return allProfiles.filter(p => 
+    return allProfiles.filter(p =>
       p.bio.toLowerCase().includes(lowerQuery) ||
       p.location.toLowerCase().includes(lowerQuery) ||
       p.subject.toLowerCase().includes(lowerQuery) ||
@@ -160,7 +156,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
     // Store previous state for rollback
     const previousProfiles = [...allProfiles];
-    
+
     // 1. Optimistic Update
     setAllProfiles(prev => {
       const index = prev.findIndex(p => p.id === user.id);
@@ -204,14 +200,14 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [user, allProfiles]);
 
   return (
-    <UserProfileContext.Provider value={{ 
+    <UserProfileContext.Provider value={{
       isLoading,
-      profile, 
+      profile,
       getUserProfile,
       getAllVisibleProfiles,
       searchUsers,
-      updateProfile, 
-      calculateAge 
+      updateProfile,
+      calculateAge
     }}>
       {children}
     </UserProfileContext.Provider>

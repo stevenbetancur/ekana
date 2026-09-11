@@ -166,7 +166,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async (): Promise<void> => {
     if (user) analyticsService.trackEvent(user.id, { eventType: 'logout' });
-    await authClient.signOut();
+    // Sin strictNullChecks los tipos de Better Auth vuelven obligatorio el argumento.
+    await authClient.signOut({});
     setUser(null);
   };
 

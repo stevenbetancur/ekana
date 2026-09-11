@@ -8,7 +8,8 @@ export interface BirthDate {
   day: string;
 }
 
-export function ageFromBirthDate(birthDate: BirthDate, now: Date = new Date()): number | null {
+// Acepta campos opcionales: el front compila sin strictNullChecks y ahí zod infiere todo como opcional.
+export function ageFromBirthDate(birthDate: Partial<BirthDate>, now: Date = new Date()): number | null {
   const year = Number(birthDate.year);
   const month = Number(birthDate.month);
   const day = Number(birthDate.day);

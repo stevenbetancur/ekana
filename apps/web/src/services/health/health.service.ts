@@ -2,10 +2,9 @@
  * Health Service
  *
  * Low-level health check functions for individual system components.
- * Follows the same pattern as userProfile.supabase.ts
+ * Checks go through the Ekana API.
  */
 
-import { supabase } from '@/integrations/supabase/client';
 import { api } from '@/lib/api';
 import { safeAsyncCheck, getClientTimestamp } from '@/utils/health.utils';
 
@@ -28,16 +27,12 @@ export async function checkDb(): Promise<HealthStatus> {
 }
 
 /**
- * Checks auth service by attempting to get current session.
+ * Checks the auth service through the Ekana API (/api/auth/ok).
  * Never throws - returns 'ok' or 'error'.
  */
 export async function checkAuth(): Promise<HealthStatus> {
   return safeAsyncCheck(async () => {
-    const { error } = await supabase.auth.getSession();
-
-    if (error) {
-      throw error;
-    }
+    await api.get('/auth/ok');
   });
 }
 
@@ -63,11 +58,3 @@ export const systemHealthService = {
   checkAuth,
   checkAll,
 };
-
-
-
-
-
-
-
-

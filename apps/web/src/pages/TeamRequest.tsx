@@ -6,7 +6,7 @@ import { useUser, useCheckUserEntitlement, useAllUsers } from "@/hooks/useMockDa
 import { useRoadmapsContext } from "@/contexts/RoadmapsContext";
 import { useTeamContext } from "@/contexts/TeamContext";
 import { useRequestContext } from "@/contexts/RequestContext";
-import { calculateAge } from "@/lib/utils";
+import { displayAge } from "@/lib/utils";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -305,7 +305,7 @@ const TeamRequest = () => {
                     </Avatar>
                     <p className="text-sm font-medium">
                       {profile?.name || 'User'}
-                      {currentUser?.birthDate && `, ${calculateAge(currentUser.birthDate)}`}
+                      {displayAge(currentUser) !== null && `, ${displayAge(currentUser)}`}
                     </p>
                   </div>
                   
@@ -549,7 +549,7 @@ const TeamRequest = () => {
                 </Avatar>
                 <p className="text-sm font-medium">
                   {profile?.name || 'User'}
-                  {currentUser?.birthDate && `, ${calculateAge(currentUser.birthDate)}`}
+                  {displayAge(currentUser) !== null && `, ${displayAge(currentUser)}`}
                 </p>
               </div>
               
@@ -562,7 +562,7 @@ const TeamRequest = () => {
                 </Avatar>
                 <p className="text-sm font-medium">
                   {receiverUser?.name || 'User'}
-                  {receiverUser?.birthDate && `, ${calculateAge(receiverUser.birthDate)}`}
+                  {displayAge(receiverUser) !== null && `, ${displayAge(receiverUser)}`}
                 </p>
               </div>
             </div>
