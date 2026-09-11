@@ -13,6 +13,7 @@ import { createMailer, type Mailer } from './email/mailer.js';
 import { registerErrorHandling } from './lib/error-handler.js';
 import { AppError } from './lib/errors.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { profileRoutes } from './modules/profiles/routes.js';
 
 export interface AppDeps {
   config: Config;
@@ -47,6 +48,7 @@ export function buildApp({ config, pool, mailer }: AppDeps): FastifyInstance {
   const db = createDb(pool);
   const auth = createAuth({ db, config, mailer: mailer ?? createMailer(config), log: app.log });
   app.register(authRoutes({ auth, config }), { prefix: '/api' });
+  app.register(profileRoutes({ db, auth }), { prefix: '/api/v1' });
   app.register(healthRoutes({ pool }), { prefix: '/api' });
 
   return app;
