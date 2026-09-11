@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import type { Pool } from 'mysql2/promise';
 import { ERROR_CODES } from '@ekana/shared';
 import { createAuth } from './auth/auth.js';
@@ -12,6 +12,7 @@ import { createDb } from './db/client.js';
 import { createMailer, type Mailer } from './email/mailer.js';
 import { registerErrorHandling } from './lib/error-handler.js';
 import { AppError } from './lib/errors.js';
+import { redactUrl } from './lib/redact.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { profileRoutes } from './modules/profiles/routes.js';
 
@@ -29,6 +30,14 @@ export function buildApp({ config, pool, mailer }: AppDeps): FastifyInstance {
         : {
             level: config.logLevel,
             redact: ['req.headers.cookie', 'req.headers.authorization'],
+            serializers: {
+              req: (request: FastifyRequest) => ({
+                method: request.method,
+                url: redactUrl(request.url),
+                host: request.host,
+                remoteAddress: request.ip,
+              }),
+            },
             transport: config.nodeEnv === 'development' ? { target: 'pino-pretty' } : undefined,
           },
     genReqId: () => randomUUID(),
