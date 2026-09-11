@@ -30,7 +30,7 @@ Convertir Ekana de un demo (Supabase + datos mock + localStorage) en una aplicac
 | ORM / migraciones | Drizzle ORM + drizzle-kit | Migraciones se ejecutan en el pre-deploy de Railway |
 | Autenticación | Better Auth (adaptador Drizzle/MySQL) | Dentro del API |
 | Realtime | Socket.IO | Dentro del API |
-| Correo | Nodemailer vía SMTP (Gmail, puerto 587, STARTTLS) | Dentro del API |
+| Correo | Resend (API HTTPS) en producción; Nodemailer/SMTP o consola en local | Dentro del API |
 | Validación / contrato | zod en `packages/shared` | Compartido front ↔ API |
 | Tests | Vitest + `app.inject` de Fastify | Local y GitHub Actions |
 
@@ -128,7 +128,7 @@ El charset/collation de `ekana` se fija con un script `db:setup` (`ALTER DATABAS
 - Recuperación de contraseña por email (enlace de un solo uso con expiración).
 - Sesión en cookie `httpOnly`, `Secure`, `SameSite=Lax`; duración 7 días con renovación por uso.
 - Rate limiting en registro, login, reenvío de verificación y recuperación.
-- Correos vía SMTP configurado por variables (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`).
+- Correos por `RESEND_API_KEY` + `EMAIL_FROM`. Railway bloquea el SMTP saliente salvo en el plan Pro, así que en producción se usa la API HTTPS de Resend; el transporte SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`) sigue disponible para desarrollo y, sin ninguno de los dos, los correos se imprimen en consola.
 
 ### 4.3 Reglas de autorización
 
@@ -191,7 +191,7 @@ Un recurso no visible para el usuario responde 404 (no 403), para no revelar su 
 - **Local:** `apps/web` en `:8080` con proxy de Vite `/api` → `http://localhost:3000`; `apps/api` en `:3000` contra la BD `ekana` del RDS.
 - **Producción:** un servicio de Railway (build `npm run build` de shared + API + front, pre-deploy de migraciones, start `node dist/server.js`, que sirve API y SPA) + `ekana_prod`.
 - **Red:** el RDS es de acceso público (el usuario ya lo usa desde Railway en otros proyectos), así que Railway y GitHub Actions se conectan directamente a `inti.cmso5z249brn.us-east-1.rds.amazonaws.com:3306` con SSL. No se requieren IPs estáticas.
-- **Correo:** en desarrollo `EMAIL_FROM=Ekana <ekana@ekana.com.co>` vía la cuenta Gmail del SMTP (contraseña de aplicación). Se cambiará por un remitente del dominio definitivo; Gmail puede reescribir el remitente si no es un alias verificado de la cuenta.
+- **Correo:** producción usa Resend. Mientras no haya dominio verificado, el remitente es `EMAIL_FROM=Ekana <onboarding@resend.dev>` y Resend solo entrega a la dirección dueña de la cuenta; al verificar el dominio definitivo se cambia el remitente y desaparece esa restricción. En desarrollo sirve el SMTP de Gmail con contraseña de aplicación.
 - **Cuentas:** Railway (plan de pago, vinculado a GitHub) aloja todo. Vercel quedó descartado tras la suspensión de las cuentas.
 - **Tests:** Vitest en `apps/api` con `app.inject` contra `ekana_test`; cada archivo de test limpia sus tablas. Toda regla de §4.3 tiene al menos un test "permitido" y uno "denegado".
 - **CI (GitHub Actions):** en cada PR y push a `main`: lint, typecheck de los tres paquetes, tests del API y build del front.
