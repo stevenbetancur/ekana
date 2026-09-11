@@ -83,7 +83,7 @@ Dominios: `auth`, `profiles`, `teams`, `roadmaps`, `progress`, `gamification`, `
 | `TIMESTAMPTZ` | `DATETIME(3)`, siempre UTC (conexión con `timezone: 'Z'`) |
 | `CREATE TYPE ... ENUM` | `ENUM(...)` en la columna |
 | Trigger `handle_updated_at` / `DEFAULT now()` | `$defaultFn` / `$onUpdate` de Drizzle (todas las escrituras pasan por el ORM) |
-| Trigger `handle_new_user` | Hook de Better Auth: crea `profiles` en la misma transacción del registro |
+| Trigger `handle_new_user` | Hook `databaseHooks.user.create.after` de Better Auth crea `profiles`; además `GET /api/v1/me` lo asegura de forma idempotente (`INSERT IGNORE`) por si el hook fallara |
 | `UNIQUE INDEX ON lower(email)` | `UNIQUE(email)`; la collation ya es case-insensitive |
 | Índice parcial `notifications WHERE read = false` | Índice `(user_id, read, created_at)` |
 | `messages(team_id, created_at DESC)` | Índice `(team_id, created_at)`; MySQL lo recorre en orden inverso |
@@ -134,7 +134,7 @@ Helpers: `requireAuth`, `requireTeamMember(teamId)`, `requireTeamAdmin(teamId)`,
 
 | Recurso | Leer | Crear | Editar / Borrar |
 |---|---|---|---|
-| Perfil | Público (nombre, avatar, bio) cualquier autenticado; datos privados (email, fecha de nacimiento, preferencias) solo el dueño | Al registrarse | Dueño |
+| Perfil | Público para cualquier autenticado: nombre, avatar, bio, ubicación, **edad calculada**, preferencias de aprendizaje (necesarias para emparejar equipos). Privado (solo el dueño): email y fecha de nacimiento exacta. Solo aparecen usuarios con email verificado | Al registrarse | Dueño (no puede auto-asignarse `isPremium` ni `hasActiveTeam`) |
 | Equipo | Cualquier autenticado | Cualquier autenticado; el creador queda como admin | Solo admins |
 | Miembros | Miembros del equipo | Solo al aceptar una solicitud/invitación | Admin cambia rol y expulsa; el usuario puede salir; el último admin no puede salir ni degradarse |
 | Metas del equipo | Miembros | Miembros | Miembros |
