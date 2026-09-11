@@ -1,9 +1,10 @@
 
 import { useAuth } from "@/contexts/AuthContext";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -14,7 +15,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!user) {
-    return <Navigate to="/auth" />;
+    // Keep the query string: a failed email verification lands on /onboarding?error=... without a session.
+    return <Navigate to={`/auth${location.search}`} replace />;
   }
 
   return <>{children}</>;

@@ -36,6 +36,7 @@ import UnitPage from './pages/UnitPage';
 import RoadmapEditor from './pages/RoadmapEditor';
 import TeamRoadmapEditor from './pages/TeamRoadmapEditor';
 import UserProfilePage from './pages/UserProfilePage';
+import ResetPassword from './pages/ResetPassword';
 import TeamProfilePage from './pages/TeamProfilePage';
 import TeamLayout from './layouts/TeamLayout';
 import { Toaster } from 'sonner';
@@ -63,6 +64,7 @@ function App() {
                           <Routes>
                             <Route path="/" element={<Landing />} />
                             <Route path="/auth" element={<Auth />} />
+                            <Route path="/auth/reset-password" element={<ResetPassword />} />
                             <Route path="/onboarding" element={
                               <ProtectedRoute>
                                 <Onboarding />

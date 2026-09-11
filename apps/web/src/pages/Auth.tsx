@@ -4,18 +4,27 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Mail, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+
+const MIN_PASSWORD_LENGTH = 8;
+const RESEND_COOLDOWN_MS = 30_000;
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [resetSent, setResetSent] = useState(false);
-  
-  const { user, loading: authLoading, error: authError, login, signup, resetPassword, clearError } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(false);
+  const linkError = searchParams.get("error");
+
+  const { user, loading: authLoading, error: authError, login, signup, resetPassword, resendVerification, clearError } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,21 +42,32 @@ const Auth = () => {
     clearError();
   }, [showForgotPassword]);
 
+  // Cooldown avoids flooding the user's inbox (and our SMTP quota) with verification emails.
+  const handleResend = async (email: string) => {
+    if (!email || resendCooldown) return;
+    setResendCooldown(true);
+    const { error } = await resendVerification(email);
+    if (!error) toast.success("Verification email sent. Check your inbox.");
+    setTimeout(() => setResendCooldown(false), RESEND_COOLDOWN_MS);
+  };
+
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     clearError();
-    
+
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
-    const { error } = await login(email, password);
-    
-    if (!error) {
+    const { error, code } = await login(email, password);
+
+    if (error) {
+      setUnverifiedEmail(code === "EMAIL_NOT_VERIFIED" ? email : null);
+    } else {
       toast.success("Welcome back!");
     }
-    
+
     setIsLoading(false);
   };
 
@@ -55,25 +75,25 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
     clearError();
-    
+
     const formData = new FormData(e.currentTarget);
     const name = formData.get('name') as string;
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
     // Client-side validation
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      toast.error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       setIsLoading(false);
       return;
     }
 
     const { error } = await signup(email, password, name);
-    
+
     if (!error) {
-      toast.success("Account created! Please check your email for confirmation.");
+      setPendingEmail(email);
     }
-    
+
     setIsLoading(false);
   };
 
@@ -81,14 +101,14 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
     clearError();
-    
+
     const { error } = await resetPassword(forgotEmail);
-    
+
     if (!error) {
       setResetSent(true);
       toast.success("Reset link sent to your email!");
     }
-    
+
     setIsLoading(false);
   };
 
@@ -141,10 +161,10 @@ const Auth = () => {
               <div className="text-center space-y-4">
                 <Mail className="h-12 w-12 text-green-500 mx-auto" />
                 <p className="text-sm text-muted-foreground">
-                  We've sent a password reset link to <strong>{forgotEmail}</strong>
+                  If an account exists for <strong>{forgotEmail}</strong>, we've sent a password reset link.
                 </p>
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   onClick={() => {
                     setShowForgotPassword(false);
                     setResetSent(false);
@@ -180,6 +200,35 @@ const Auth = () => {
     );
   }
 
+  if (pendingEmail) {
+    return (
+      <div className="min-h-screen bg-ekana-purple-dark flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <Mail className="h-12 w-12 text-primary mx-auto mb-2" />
+            <CardTitle>Check your inbox</CardTitle>
+            <CardDescription>
+              We sent a verification link to <strong>{pendingEmail}</strong>. Click it to activate your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button
+              className="w-full"
+              variant="outline"
+              disabled={resendCooldown}
+              onClick={() => handleResend(pendingEmail)}
+            >
+              {resendCooldown ? "Email sent. You can resend in 30 seconds" : "Resend verification email"}
+            </Button>
+            <Button className="w-full" variant="ghost" onClick={() => setPendingEmail(null)}>
+              Back to Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-ekana-purple-dark flex items-center justify-center p-4 relative">
       <Button
@@ -190,7 +239,7 @@ const Auth = () => {
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back to Home
       </Button>
-      
+
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <img src="/lovable-uploads/bec881ef-2b66-46e6-ad59-3436f0ed052e.png" alt="Ekana Logo" className="w-[215px] h-auto mx-auto mb-4" />
@@ -205,7 +254,45 @@ const Auth = () => {
                 <AlertDescription>{authError}</AlertDescription>
               </Alert>
             )}
-            
+            {unverifiedEmail && (
+              <div className="mb-4 text-center">
+                <Button
+                  variant="link"
+                  className="text-sm"
+                  disabled={resendCooldown}
+                  onClick={() => handleResend(unverifiedEmail)}
+                >
+                  {resendCooldown ? "Verification email sent" : "Resend verification email"}
+                </Button>
+              </div>
+            )}
+            {linkError && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="space-y-2">
+                  <p>This verification link is invalid or has expired. Enter your email to get a new one.</p>
+                  <form
+                    className="flex gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleResend(resendEmail).then(() => setSearchParams({}));
+                    }}
+                  >
+                    <Input
+                      type="email"
+                      required
+                      placeholder="Email"
+                      value={resendEmail}
+                      onChange={(e) => setResendEmail(e.target.value)}
+                    />
+                    <Button type="submit" size="sm" disabled={resendCooldown}>
+                      Send
+                    </Button>
+                  </form>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <Tabs defaultValue="signin" className="w-full" onValueChange={() => clearError()}>
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
@@ -239,7 +326,7 @@ const Auth = () => {
                     )}
                   </Button>
                 </form>
-                
+
                 <div className="text-center">
                   <Button
                     variant="link"
@@ -288,9 +375,9 @@ const Auth = () => {
                   <Input
                     name="password"
                     type="password"
-                    placeholder="Password (min 6 characters)"
+                    placeholder={`Password (min ${MIN_PASSWORD_LENGTH} characters)`}
                     required
-                    minLength={6}
+                    minLength={MIN_PASSWORD_LENGTH}
                     autoComplete="new-password"
                   />
                   <Button type="submit" className="w-full" disabled={isLoading}>
@@ -330,9 +417,9 @@ const Auth = () => {
             </Tabs>
           </CardContent>
         </Card>
-        
+
         <p className="text-xs text-white/60 text-center mt-4">
-          Note: Email confirmation may be required. Check your inbox after signing up.
+          You'll need to verify your email before signing in.
         </p>
       </div>
     </div>
