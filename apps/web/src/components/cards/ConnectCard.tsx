@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Clock, Globe, Users, Crown, Target, MessageCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { User, Team } from "@/lib/mockData";
-import { calculateAge } from "@/lib/utils";
+import { displayAge } from "@/lib/utils";
 import { useAggregatedTeamData, useTeamMembersWithRoles } from "@/hooks/useMockData";
 
 // Type definitions for the card data
@@ -43,7 +43,7 @@ const ConnectCard = ({ type, data, user, team, onAction }: ConnectCardProps) => 
   const userData = isUser ? data as UserData : null;
   const teamData = !isUser ? data as TeamData : null;
   
-  const age = user?.birthDate ? calculateAge(user.birthDate) : null;
+  const age = displayAge(user);
   
   // Get aggregated team data if this is a team card
   const displayTeam = team ? useAggregatedTeamData(team) : null;

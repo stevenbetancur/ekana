@@ -19,6 +19,15 @@ export function calculateAge(birthDate: { day: string; month: string; year: stri
   return age;
 }
 
+// Otros usuarios traen `age` calculada por el API; el propio usuario trae su fecha de nacimiento.
+export function displayAge(
+  user?: { age?: number | null; birthDate?: { day: string; month: string; year: string } } | null,
+): number | null {
+  if (!user) return null;
+  if (user.age !== undefined && user.age !== null) return user.age;
+  return user.birthDate ? calculateAge(user.birthDate) : null;
+}
+
 // Team aggregation utility functions
 import { User } from '@/lib/mockData';
 

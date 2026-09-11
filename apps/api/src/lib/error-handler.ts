@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { ERROR_CODES, type ErrorResponse } from '@ekana/shared';
 import { AppError } from './errors.js';
@@ -15,7 +15,16 @@ function statusCodeOf(error: unknown): number | undefined {
   return undefined;
 }
 
-export function registerErrorHandling(app: FastifyInstance): void {
+// Solo las navegaciones de página (GET/HEAD fuera de /api y sin extensión de archivo) reciben la SPA.
+function isPageNavigation(request: FastifyRequest): boolean {
+  if (request.method !== 'GET' && request.method !== 'HEAD') return false;
+  const path = request.url.split('?')[0] ?? '';
+  if (path === '/api' || path.startsWith('/api/')) return false;
+  const lastSegment = path.split('/').pop() ?? '';
+  return !lastSegment.includes('.');
+}
+
+export function registerErrorHandling(app: FastifyInstance, options: { spaIndexHtml?: string | null } = {}): void {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send(errorBody(error.code, error.message, error.details));
@@ -34,7 +43,10 @@ export function registerErrorHandling(app: FastifyInstance): void {
   });
 
   app.setNotFoundHandler((request, reply) => {
-    reply
+    if (options.spaIndexHtml && isPageNavigation(request)) {
+      return reply.status(200).type('text/html; charset=utf-8').header('cache-control', 'no-cache').send(options.spaIndexHtml);
+    }
+    return reply
       .status(404)
       .send(errorBody(ERROR_CODES.ROUTE_NOT_FOUND, `Ruta no encontrada: ${request.method} ${request.url}`));
   });

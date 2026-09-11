@@ -4,8 +4,8 @@ Plataforma de aprendizaje colaborativo. Monorepo con npm workspaces:
 
 | Paquete | Qué es | Despliegue |
 |---|---|---|
-| `apps/web` | Front React + Vite + shadcn/ui | Vercel |
-| `apps/api` | API Fastify + Drizzle (MySQL) | Railway |
+| `apps/web` | Front React + Vite + shadcn/ui | Railway (lo sirve el API, mismo dominio) |
+| `apps/api` | API Fastify + Drizzle (MySQL) + Better Auth | Railway |
 | `packages/shared` | Esquemas zod y tipos compartidos | — |
 
 Diseño: `docs/superpowers/specs/2026-09-10-ekana-mysql-migration-design.md`

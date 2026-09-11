@@ -4,7 +4,7 @@ import { useGamificationContext } from '@/contexts/GamificationContext';
 import { useRequestContext } from '@/contexts/RequestContext';
 import { useUser, useUserTeams, useUserCompletedUnits } from '@/hooks/useMockData';
 import { useRoadmapsContext } from '@/contexts/RoadmapsContext';
-import { calculateAge, findCommonRoadmaps } from '@/lib/utils';
+import { displayAge, findCommonRoadmaps } from '@/lib/utils';
 import { mockPointEvents, mockBadgeEvents } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -54,7 +54,7 @@ const UserProfilePage = () => {
     );
   }
 
-  const age = profileUser.birthDate ? calculateAge(profileUser.birthDate) : null;
+  const age = displayAge(profileUser);
 
   // Format availability as strings
   const formatAvailability = () => {

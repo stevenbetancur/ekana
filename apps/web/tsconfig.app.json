@@ -23,7 +23,8 @@
 
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@ekana/shared": ["../../packages/shared/src/index.ts"]
     }
   },
   "include": ["src"]

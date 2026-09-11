@@ -24,7 +24,7 @@ Convertir Ekana de un demo (Supabase + datos mock + localStorage) en una aplicac
 
 | Pieza | Tecnología | Despliegue |
 |---|---|---|
-| Frontend | React 18 + Vite + TypeScript + shadcn/ui + TanStack Query | Vercel |
+| Frontend | React 18 + Vite + TypeScript + shadcn/ui + TanStack Query | Railway: el API sirve el build (mismo dominio) |
 | API | Node 20 + Fastify + TypeScript (estricto) | Railway (proceso long-running) |
 | Base de datos | MySQL 8.0.45 en AWS RDS (us-east-1) | Servidor del usuario |
 | ORM / migraciones | Drizzle ORM + drizzle-kit | Migraciones se ejecutan en el pre-deploy de Railway |
@@ -62,9 +62,11 @@ Dominios: `auth`, `profiles`, `teams`, `roadmaps`, `progress`, `gamification`, `
 
 ### 2.2 Comunicación front ↔ API y sesiones
 
-- **Sin dominio propio (fase actual):** el front llama a `/api/*` en su propio origen (Vercel). `vercel.json` reescribe `/api/:path*` hacia la URL de Railway. Para el navegador es el mismo sitio, así que la cookie de sesión es de primera parte.
-- **Socket.IO** no atraviesa los rewrites de Vercel: el cliente pide un ticket firmado de corta duración (60 s) a `GET /api/realtime/ticket` y conecta directo a Railway presentándolo.
-- **Con dominio propio (futuro):** `app.<dominio>` (Vercel) y `api.<dominio>` (Railway). Solo cambian variables de entorno (URLs, dominio de cookie, orígenes CORS); no hay cambios de código.
+- **Un solo servicio en Railway (desde 2026-09-11):** el API sirve también el build del front (`apps/web/dist`) con `@fastify/static`: `assets/` con caché inmutable, `index.html` sin caché y fallback de la SPA para las navegaciones `GET` fuera de `/api`. Front y API comparten dominio (`https://ekana-production.up.railway.app`), así que la cookie de sesión es de primera parte y no hay proxy ni CORS.
+- **Motivo:** Vercel suspendió las cuentas (equipo `ekana` y personal) el 2026-09-11 por "violación de términos" sin detallar la causa (probablemente plan Hobby usado para un SaaS/equipo). Se descartó apelar.
+- **Socket.IO** (fase 6) conectará directo al mismo origen, sin el ticket que requería el diseño con Vercel.
+- **Seguridad:** helmet con CSP estricta (`script-src 'self'`, `connect-src 'self'`, `frame-ancestors 'none'`).
+- **Con dominio propio (futuro):** se asigna el dominio al mismo servicio de Railway y se actualizan `APP_URL` y `CORS_ORIGINS`; no hay cambios de código.
 
 ## 3. Modelo de datos (MySQL)
 
@@ -83,7 +85,7 @@ Dominios: `auth`, `profiles`, `teams`, `roadmaps`, `progress`, `gamification`, `
 | `TIMESTAMPTZ` | `DATETIME(3)`, siempre UTC (conexión con `timezone: 'Z'`) |
 | `CREATE TYPE ... ENUM` | `ENUM(...)` en la columna |
 | Trigger `handle_updated_at` / `DEFAULT now()` | `$defaultFn` / `$onUpdate` de Drizzle (todas las escrituras pasan por el ORM) |
-| Trigger `handle_new_user` | Hook de Better Auth: crea `profiles` en la misma transacción del registro |
+| Trigger `handle_new_user` | Hook `databaseHooks.user.create.after` de Better Auth crea `profiles`; además `GET /api/v1/me` lo asegura de forma idempotente (`INSERT IGNORE`) por si el hook fallara |
 | `UNIQUE INDEX ON lower(email)` | `UNIQUE(email)`; la collation ya es case-insensitive |
 | Índice parcial `notifications WHERE read = false` | Índice `(user_id, read, created_at)` |
 | `messages(team_id, created_at DESC)` | Índice `(team_id, created_at)`; MySQL lo recorre en orden inverso |
@@ -134,7 +136,7 @@ Helpers: `requireAuth`, `requireTeamMember(teamId)`, `requireTeamAdmin(teamId)`,
 
 | Recurso | Leer | Crear | Editar / Borrar |
 |---|---|---|---|
-| Perfil | Público (nombre, avatar, bio) cualquier autenticado; datos privados (email, fecha de nacimiento, preferencias) solo el dueño | Al registrarse | Dueño |
+| Perfil | Público para cualquier autenticado: nombre, avatar, bio, ubicación, **edad calculada**, preferencias de aprendizaje (necesarias para emparejar equipos). Privado (solo el dueño): email y fecha de nacimiento exacta. Solo aparecen usuarios con email verificado | Al registrarse | Dueño (no puede auto-asignarse `isPremium` ni `hasActiveTeam`) |
 | Equipo | Cualquier autenticado | Cualquier autenticado; el creador queda como admin | Solo admins |
 | Miembros | Miembros del equipo | Solo al aceptar una solicitud/invitación | Admin cambia rol y expulsa; el usuario puede salir; el último admin no puede salir ni degradarse |
 | Metas del equipo | Miembros | Miembros | Miembros |
@@ -187,10 +189,10 @@ Un recurso no visible para el usuario responde 404 (no 403), para no revelar su 
 ## 6. Entornos, despliegue y calidad
 
 - **Local:** `apps/web` en `:8080` con proxy de Vite `/api` → `http://localhost:3000`; `apps/api` en `:3000` contra la BD `ekana` del RDS.
-- **Producción:** Vercel (raíz `apps/web`, `vercel.json` con rewrite de `/api/*` a Railway y fallback SPA) + Railway (servicio `apps/api`, pre-deploy `drizzle-kit migrate`, start `node dist/server.js`) + `ekana_prod`.
+- **Producción:** un servicio de Railway (build `npm run build` de shared + API + front, pre-deploy de migraciones, start `node dist/server.js`, que sirve API y SPA) + `ekana_prod`.
 - **Red:** el RDS es de acceso público (el usuario ya lo usa desde Railway en otros proyectos), así que Railway y GitHub Actions se conectan directamente a `inti.cmso5z249brn.us-east-1.rds.amazonaws.com:3306` con SSL. No se requieren IPs estáticas.
 - **Correo:** en desarrollo `EMAIL_FROM=Ekana <ekana@ekana.com.co>` vía la cuenta Gmail del SMTP (contraseña de aplicación). Se cambiará por un remitente del dominio definitivo; Gmail puede reescribir el remitente si no es un alias verificado de la cuenta.
-- **Cuentas:** Railway ya existe y está vinculado a GitHub; la cuenta de Vercel se crea al final de la fase 1.
+- **Cuentas:** Railway (plan de pago, vinculado a GitHub) aloja todo. Vercel quedó descartado tras la suspensión de las cuentas.
 - **Tests:** Vitest en `apps/api` con `app.inject` contra `ekana_test`; cada archivo de test limpia sus tablas. Toda regla de §4.3 tiene al menos un test "permitido" y uno "denegado".
 - **CI (GitHub Actions):** en cada PR y push a `main`: lint, typecheck de los tres paquetes, tests del API y build del front.
 

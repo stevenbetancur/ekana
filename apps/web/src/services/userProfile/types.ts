@@ -7,6 +7,7 @@ export interface UserProfile {
   bio: string;
   location: string;
   birthDate: { month: string; day: string; year: string } | null;
+  age?: number | null;
   subject: string;
   goal: string;
   level: string;
