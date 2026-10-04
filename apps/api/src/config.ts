@@ -37,12 +37,19 @@ const envSchema = z
     SMTP_SECURE: booleanString.default('false'),
     SMTP_USER: optionalString,
     SMTP_PASS: optionalString,
+    RESEND_API_KEY: optionalString,
     EMAIL_FROM: z.string().min(1).default('Ekana <no-reply@localhost>'),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== 'production') return;
-    for (const key of ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'] as const) {
-      if (!env[key]) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: 'obligatorio en producción' });
+    // En producción hace falta un transporte real: Resend (API HTTPS) o SMTP completo.
+    const smtpCompleto = Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS);
+    if (!env.RESEND_API_KEY && !smtpCompleto) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['RESEND_API_KEY'],
+        message: 'obligatorio en producción (o SMTP_HOST + SMTP_USER + SMTP_PASS)',
+      });
     }
   });
 
@@ -69,6 +76,7 @@ export type Config = {
   appUrl: string;
   auth: { secret: string; rateLimitMax: number };
   smtp: SmtpConfig | null;
+  resendApiKey: string | null;
   emailFrom: string;
 };
 
@@ -110,6 +118,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       e.SMTP_HOST && e.SMTP_USER && e.SMTP_PASS
         ? { host: e.SMTP_HOST, port: e.SMTP_PORT, secure: e.SMTP_SECURE, user: e.SMTP_USER, pass: e.SMTP_PASS }
         : null,
+    resendApiKey: e.RESEND_API_KEY ?? null,
     emailFrom: e.EMAIL_FROM,
   };
 }

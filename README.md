@@ -37,4 +37,5 @@ npm run dev:web       # front en http://localhost:8080 (proxy /api → API)
 ## Reglas
 
 - El esquema solo cambia con migraciones generadas y versionadas: nunca a mano.
-- Secretos solo en `.env` (ignorado), en variables de Railway/Vercel o en secrets de GitHub.
+- Secretos solo en `.env` (ignorado), en variables de Railway o en secrets de GitHub.
+- Los correos salen por la API de Resend (`RESEND_API_KEY`): Railway bloquea el SMTP saliente salvo en el plan Pro. En local sirve SMTP, o la consola si no hay nada configurado.

@@ -55,6 +55,7 @@ describe('loadConfig', () => {
     expect(config.appUrl).toBe('http://localhost:8080');
     expect(config.auth).toEqual({ secret: 'x'.repeat(32), rateLimitMax: 20 });
     expect(config.smtp).toBeNull();
+    expect(config.resendApiKey).toBeNull();
     expect(config.emailFrom).toBe('Ekana <no-reply@localhost>');
   });
 
@@ -70,8 +71,16 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...base, ...smtpEnv, SMTP_PASS: '' }).smtp).toBeNull();
   });
 
-  it('exige SMTP en producción', () => {
-    expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(/SMTP_HOST/);
+  it('exige un transporte de correo en producción', () => {
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(/RESEND_API_KEY/);
+  });
+
+  it('acepta producción con Resend o con SMTP completo', () => {
+    const prod = { ...base, NODE_ENV: 'production' };
+    expect(loadConfig({ ...prod, RESEND_API_KEY: 're_123' }).resendApiKey).toBe('re_123');
+    const conSmtp = loadConfig({ ...prod, SMTP_HOST: 'smtp.gmail.com', SMTP_USER: 'a@b.com', SMTP_PASS: 'secret' });
+    expect(conSmtp.resendApiKey).toBeNull();
+    expect(conSmtp.smtp?.host).toBe('smtp.gmail.com');
   });
 
   it('exige un BETTER_AUTH_SECRET de al menos 32 caracteres', () => {
